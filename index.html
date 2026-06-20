@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>まいにちパタカラ（WEBお試し版）</title>
+    <title>まいにちパタカラ（最新音つき版）</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background-color: #f0f8ff; padding: 20px; color: #333; }
         .container { background-color: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
         h1 { color: #0076ff; font-size: 24px; }
-        button { background-color: #0076ff; color: white; border: none; padding: 15px 3px; width: 100%; border-radius: 10px; font-size: 18px; font-weight: bold; margin-top: 20px; cursor: pointer; }
+        button { background-color: #0076ff; color: white; border: none; padding: 15px 3px; width: 100%; border-radius: 10px; font-size: 20px; font-weight: bold; margin-top: 20px; cursor: pointer; }
         button:disabled { background-color: #ccc; }
+        .countdown { font-size: 48px; font-weight: bold; color: #ff9900; margin: 20px 0; min-height: 60px; }
         .result { font-size: 22px; font-weight: bold; margin-top: 20px; padding: 10px; border-radius: 5px; }
         .success { background-color: #ddffdd; color: #008800; }
         .warning { background-color: #ffdddd; color: #cc0000; }
@@ -20,13 +21,14 @@
 <body>
 
 <div class="container">
-    <h1>まいにchパタカラ</h1>
-    <p>【WEBお試し版】</p>
-    <p style="font-size:14px; color:#666;">「スタート」を押して、1秒間に「パ」を何回言えるかチャレンジしよう！</p>
+    <h1>まいにちパタカラ</h1>
+    <p>【最新WEBお試し版・音つき】</p>
+    <p style="font-size:14px; color:#666;">「スタート」を押すと音に合わせてカウントダウンが始まります！</p>
+    
+    <div id="countdownDisplay" class="countdown">⏱️</div>
     
     <button id="startBtn">計測スタート！</button>
     
-    <div id="status" style="margin-top: 15px; font-weight: bold; color: #666;"></div>
     <div id="resultOutput"></div>
 
     <div class="promo-box">
@@ -36,7 +38,6 @@
             <li><b>「パ・タ・カ・ラ」すべての音の自動計測</b></li>
             <li>カレンダーへの毎日の自動履歴保存</li>
             <li>お口を鍛える「パタカラリズムゲーム」搭載</li>
-            <li>忘れ防止のリマインダー通知機能</li>
         </ul>
         <p style="text-align:center; margin-bottom:0; font-weight:bold; color:#ff9900;">お試し版の結果画面から先行予約受付中！</p>
     </div>
@@ -46,81 +47,103 @@
 let audioContext;
 let analyser;
 let microphone;
-let javascriptNode;
 
 const startBtn = document.getElementById('startBtn');
-const statusDiv = document.getElementById('status');
+const countdownDisplay = document.getElementById('countdownDisplay');
 const resultOutput = document.getElementById('resultOutput');
+
+function playTone(freq, type, duration) {
+    if (!audioContext) return;
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.1, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioContext.destination);
+    osc.start();
+    osc.stop(audioContext.currentTime + duration);
+}
 
 startBtn.addEventListener('click', async () => {
     resultOutput.innerHTML = "";
     startBtn.disabled = true;
     
     try {
-        // マイクの許可をもらう
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // iPhone対策：タップした瞬間にオーディオContextを新しく生成
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
         
         analyser.fftSize = 256;
         microphone.connect(analyser);
         
-        let count = 0;
-        let isSpeaking = false;
-        let timeLeft = 3; // 最初の3秒でマイクを安定させる
-        
-        // カウントダウン
-        statusDiv.innerText = "準備中... マイクに向かって「パパパ...」と言う準備をしてね";
-        
-        setTimeout(() => {
-            statusDiv.innerText = "スタート！「パパパパパ！」と言って！";
-            statusDiv.style.color = "red";
-            
-            // 1秒間の計測開始
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            
-            const checkAudio = setInterval(() => {
-                analyser.getByteFrequencyData(dataArray);
-                let sum = 0;
-                for(let i=0; i<bufferLength; i++) { sum += dataArray[i]; }
-                let average = sum / bufferLength;
-                
-                // 音の大きさが一定以上なら「声が出た」と判定
-                if (average > 35) { 
-                    if (!isSpeaking) {
-                        count++;
-                        isSpeaking = true;
-                    }
-                } else {
-                    isSpeaking = false;
-                }
-            }, 50); // 0.05秒ごとにチェック
-            
-            // 1秒後に終了
-            setTimeout(() => {
-                clearInterval(checkAudio);
-                stream.getTracks().forEach(track => track.stop()); // マイクを止める
-                audioContext.close();
-                
-                statusDiv.innerText = "計測終了！";
-                statusDiv.style.color = "#333";
-                startBtn.disabled = false;
-                
-                // 結果の計算（1秒間の回数）
-                showResult(count);
-                
-            }, 1000);
-            
-        }, 2000);
+        // カウントダウン (3 -> 2 -> 1)
+        let countNum = 3;
+        countdownDisplay.style.color = "#ff9900";
+        countdownDisplay.innerText = countNum;
+        playTone(600, 'sine', 0.1); 
+
+        const interval = setInterval(() => {
+            countNum--;
+            if (countNum > 0) {
+                countdownDisplay.innerText = countNum;
+                playTone(600, 'sine', 0.1); 
+            } else {
+                clearInterval(interval);
+                startMeasurement(stream);
+            }
+        }, 1000);
         
     } catch (err) {
-        alert("マイクの許可が取れませんでした。ブラウザの設定でマイクを許可してください。");
+        alert("マイクの許可が必要です。iPhoneの設定やブラウザの許可を確認してください。");
         startBtn.disabled = false;
-        statusDiv.innerText = "";
+        countdownDisplay.innerText = "⏱️";
     }
 });
+
+function startMeasurement(stream) {
+    countdownDisplay.style.color = "red";
+    countdownDisplay.innerText = "スタート！";
+    playTone(1000, 'sine', 0.3); 
+    
+    let count = 0;
+    let isSpeaking = false;
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    const checkAudio = setInterval(() => {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for(let i=0; i<bufferLength; i++) { sum += dataArray[i]; }
+        let average = sum / bufferLength;
+        
+        // 感度を「10」まで下げて、どんな小さな音でも拾うように超高感度化！
+        if (average > 10) { 
+            if (!isSpeaking) {
+                count++;
+                isSpeaking = true;
+            }
+        } else {
+            isSpeaking = false;
+        }
+    }, 40);
+    
+    setTimeout(() => {
+        clearInterval(checkAudio);
+        stream.getTracks().forEach(track => track.stop());
+        
+        countdownDisplay.style.color = "#333";
+        countdownDisplay.innerText = "終了！";
+        playTone(300, 'sawtooth', 0.2); 
+        
+        startBtn.disabled = false;
+        showResult(count);
+    }, 1000);
+}
 
 function showResult(score) {
     let html = "";
@@ -130,14 +153,13 @@ function showResult(score) {
         html = `<div class="result warning">結果：${score} 回 / 秒<br>⚠️ 要注意（お口の老化のサイン）</div>`;
     }
     
-    // 製品版への誘導
     html += `
         <div style="margin-top:20px; padding:15px; background:#f9f9f9; border-radius:10px; border:1px solid #ddd;">
             <p style="font-size:15px; font-weight:bold; margin-top:0;">💡 あなたへのおすすめアドバイス</p>
             <p style="font-size:13px; color:#555; text-align:left; line-height:1.4;">
                 ${score >= 6 ? '今のお口の若さをキープするために、毎日パタカラ体操を続けましょう！' : '「パ」の回数が少し少なめです。お口の筋肉が弱っているかもしれません。毎日「パタカラ」と発音するトレーニングで回復できます！'}
             </p>
-            <button onclick="alert('先行予約が完了しました！アプリの公開をお楽しみに！')" style="background-color:#ff9900; margin-top:10px;">🎁 フル機能アプリ版の無料先行予約をする</button>
+            <button onclick="window.open('https://note.com/', '_blank')" style="background-color:#ff9900; margin-top:10px;">📖 お口の若さを保つトレーニング方法（note記事）を見る</button>
         </div>
     `;
     resultOutput.innerHTML = html;
@@ -146,3 +168,4 @@ function showResult(score) {
 
 </body>
 </html>
+
