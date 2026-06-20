@@ -123,8 +123,8 @@ function startMeasurement(stream) {
         for(let i=0; i<bufferLength; i++) { sum += dataArray[i]; }
         let average = sum / bufferLength;
         
-        // 感度調整：判定ラインを 35 から「15」に下げて声を拾いやすく改善！
-        if (average > 15) { 
+        // 感度調整：判定ラインを「12」にさらに下げて小さな声でも超確実に拾うように調整！
+        if (average > 12) { 
             if (!isSpeaking) {
                 count++;
                 isSpeaking = true;
@@ -132,7 +132,7 @@ function startMeasurement(stream) {
         } else {
             isSpeaking = false;
         }
-    }, 40); // チェック間隔も少し細かくして精度アップ
+    }, 40);
     
     // 1秒後に終了
     setTimeout(() => {
@@ -162,7 +162,7 @@ function showResult(score) {
             <p style="font-size:13px; color:#555; text-align:left; line-height:1.4;">
                 ${score >= 6 ? '今のお口の若さをキープするために、毎日パタカラ体操を続けましょう！' : '「パ」の回数が少し少なめです。お口の筋肉が弱っているかもしれません。毎日「パタカラ」と発音するトレーニングで回復できます！'}
             </p>
-            <button onclick="alert('先行予約が完了しました！アプリの公開をお楽しみに！')" style="background-color:#ff9900; margin-top:10px;">🎁 フル機能アプリ版の無料先行予約をする</button>
+            <button onclick="window.open('https://note.com/', '_blank')" style="background-color:#ff9900; margin-top:10px;">📖 お口の若さを保つトレーニング方法（note記事）を見る</button>
         </div>
     `;
     resultOutput.innerHTML = html;
