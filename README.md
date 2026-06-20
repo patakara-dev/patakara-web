@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>まいにちパタカラ（WEBお試し版）</title>
+    <title>まいにちパタカラ（最新音つき版）</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background-color: #f0f8ff; padding: 20px; color: #333; }
         .container { background-color: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
@@ -22,7 +22,7 @@
 
 <div class="container">
     <h1>まいにちパタカラ</h1>
-    <p>【WEBお試し版・音つき】</p>
+    <p>【最新WEBお試し版・音つき】</p>
     <p style="font-size:14px; color:#666;">「スタート」を押すと音に合わせてカウントダウンが始まります！</p>
     
     <div id="countdownDisplay" class="countdown">⏱️</div>
@@ -38,7 +38,6 @@
             <li><b>「パ・タ・カ・ラ」すべての音の自動計測</b></li>
             <li>カレンダーへの毎日の自動履歴保存</li>
             <li>お口を鍛える「パタカラリズムゲーム」搭載</li>
-            <li>忘れ防止のリマインダー通知機能</li>
         </ul>
         <p style="text-align:center; margin-bottom:0; font-weight:bold; color:#ff9900;">お試し版の結果画面から先行予約受付中！</p>
     </div>
@@ -53,7 +52,6 @@ const startBtn = document.getElementById('startBtn');
 const countdownDisplay = document.getElementById('countdownDisplay');
 const resultOutput = document.getElementById('resultOutput');
 
-// 電子音を鳴らす関数
 function playTone(freq, type, duration) {
     if (!audioContext) return;
     const osc = audioContext.createOscillator();
@@ -73,26 +71,27 @@ startBtn.addEventListener('click', async () => {
     startBtn.disabled = true;
     
     try {
-        // マイクとオーディオの準備
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // iPhone対策：タップした瞬間にオーディオContextを新しく生成
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         analyser = audioContext.createAnalyser();
         microphone = audioContext.createMediaStreamSource(stream);
         
         analyser.fftSize = 256;
         microphone.connect(analyser);
         
-        // カウントダウン開始 (3 -> 2 -> 1)
+        // カウントダウン (3 -> 2 -> 1)
         let countNum = 3;
         countdownDisplay.style.color = "#ff9900";
         countdownDisplay.innerText = countNum;
-        playTone(600, 'sine', 0.1); // ピッ
+        playTone(600, 'sine', 0.1); 
 
         const interval = setInterval(() => {
             countNum--;
             if (countNum > 0) {
                 countdownDisplay.innerText = countNum;
-                playTone(600, 'sine', 0.1); // ピッ
+                playTone(600, 'sine', 0.1); 
             } else {
                 clearInterval(interval);
                 startMeasurement(stream);
@@ -100,7 +99,7 @@ startBtn.addEventListener('click', async () => {
         }, 1000);
         
     } catch (err) {
-        alert("マイクの許可が取れませんでした。");
+        alert("マイクの許可が必要です。iPhoneの設定やブラウザの許可を確認してください。");
         startBtn.disabled = false;
         countdownDisplay.innerText = "⏱️";
     }
@@ -109,22 +108,21 @@ startBtn.addEventListener('click', async () => {
 function startMeasurement(stream) {
     countdownDisplay.style.color = "red";
     countdownDisplay.innerText = "スタート！";
-    playTone(1000, 'sine', 0.3); // ピーン！
+    playTone(1000, 'sine', 0.3); 
     
     let count = 0;
     let isSpeaking = false;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
-    // 1秒間の計測
     const checkAudio = setInterval(() => {
         analyser.getByteFrequencyData(dataArray);
         let sum = 0;
         for(let i=0; i<bufferLength; i++) { sum += dataArray[i]; }
         let average = sum / bufferLength;
         
-        // 感度調整：判定ラインを「12」にさらに下げて小さな声でも超確実に拾うように調整！
-        if (average > 12) { 
+        // 感度を「10」まで下げて、どんな小さな音でも拾うように超高感度化！
+        if (average > 10) { 
             if (!isSpeaking) {
                 count++;
                 isSpeaking = true;
@@ -134,14 +132,13 @@ function startMeasurement(stream) {
         }
     }, 40);
     
-    // 1秒後に終了
     setTimeout(() => {
         clearInterval(checkAudio);
         stream.getTracks().forEach(track => track.stop());
         
         countdownDisplay.style.color = "#333";
         countdownDisplay.innerText = "終了！";
-        playTone(300, 'sawtooth', 0.2); // ブブー
+        playTone(300, 'sawtooth', 0.2); 
         
         startBtn.disabled = false;
         showResult(count);
