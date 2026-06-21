@@ -3,18 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>まいにちパタカラ（センサー改良版）</title>
+    <title>まいにちパタカラ（指タップ連打版）</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background-color: #f0f8ff; padding: 20px; color: #333; }
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f0f8ff; padding: 20px; color: #333; user-select: none; }
         .container { background-color: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
         h1 { color: #0076ff; font-size: 24px; margin-bottom: 5px; }
         .subtitle { font-size: 14px; color: #666; font-weight: bold; margin-bottom: 20px; }
+        
         .guide-box { background-color: #e6f2ff; border-left: 5px solid #0076ff; padding: 12px; border-radius: 5px; text-align: left; font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
         .target-text { font-weight: bold; color: #ff5500; }
-        button { background-color: #0076ff; color: white; border: none; padding: 15px 3px; width: 100%; border-radius: 10px; font-size: 22px; font-weight: bold; margin-top: 10px; cursor: pointer; box-shadow: 0 4px #0055b3; }
-        button:disabled { background-color: #ccc; box-shadow: none; }
-        .countdown { font-size: 44px; font-weight: bold; color: #ff9900; margin: 20px 0; min-height: 120px; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #fffde6; border-radius: 10px; border: 1px solid #ffe699; }
-        .action-msg { font-size: 26px; color: red; font-weight: bold; }
+
+        /* スタートボタン */
+        #startBtn { background-color: #0076ff; color: white; border: none; padding: 15px 3px; width: 100%; border-radius: 10px; font-size: 20px; font-weight: bold; cursor: pointer; }
+        #startBtn:disabled { background-color: #ccc; }
+        
+        /* 巨大な連打ターゲットエリア */
+        .tap-zone { margin: 20px 0; height: 180px; background-color: #fffde6; border: 3px dashed #ff9900; border-radius: 15px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 24px; font-weight: bold; color: #ff6600; cursor: pointer; touch-action: manipulation; }
+        .tap-zone:active { background-color: #ffe699; }
+        
+        /* カウントダウン表示 */
+        .count-num { font-size: 50px; color: #ff3333; }
+
         .result { font-size: 22px; font-weight: bold; margin-top: 20px; padding: 15px; border-radius: 5px; }
         .success { background-color: #ddffdd; color: #008800; }
         .warning { background-color: #ffdddd; color: #cc0000; }
@@ -24,113 +33,91 @@
 
 <div class="container">
     <h1>まいにちパタカラ</h1>
-    <div class="subtitle">【WEBお試し版・センサー改良版】</div>
+    <div class="subtitle">【お試し・指タップ連打版】</div>
     
     <div class="guide-box">
         <b>💡 やり方：</b><br>
-        ① 下のボタンを押します。<br>
-        ② 「3・2 wilderness 1」のあと、画面が赤くなって<b>「パパパパパ！」</b>と出たら、スマホに向かってハッキリ発音してください！<br>
-        🎯 <b>目標：1秒間に <span class="target-text">6回以上</span></b>
-    </div>
-    
-    <div id="countdownDisplay" class="countdown">
-        <span style="font-size: 18px; color: #888;">準備ができたら下のボタンをタップ</span>
+        ① 下の「計測スタート」を押すと3秒前読みが始まります。<br>
+        ② 画面が切り替わったら、真ん中の黄色い箱の中を<b>「パ！パ！パ！」と声に出しながら、指で猛連打</b>してください！<br>
+        🎯 <b>目標：1秒間に <span class="target-text">6品（回）以上</span></b>
     </div>
     
     <button id="startBtn">計測スタート！</button>
+    
+    <div id="tapZone" class="tap-zone" style="display: none;">
+        ここの中を猛連打！！
+    </div>
+    
+    <div id="countdownDisplay" style="margin: 20px 0; font-size: 20px; font-weight: bold;"></div>
     
     <div id="resultOutput"></div>
 </div>
 
 <script>
-let audioContext;
-let analyser;
-
 const startBtn = document.getElementById('startBtn');
+const tapZone = document.getElementById('tapZone');
 const countdownDisplay = document.getElementById('countdownDisplay');
 const resultOutput = document.getElementById('resultOutput');
 
-startBtn.addEventListener('click', async () => {
+let score = 0;
+let isMeasuring = false;
+
+// 最初は連打ゾーンを隠しておく
+tapZone.style.display = "none";
+
+startBtn.addEventListener('click', () => {
     resultOutput.innerHTML = "";
     startBtn.disabled = true;
+    score = 0;
     
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
-        });
-        
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        const source = audioContext.createMediaStreamSource(stream);
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        
-        let countNum = 3;
-        countdownDisplay.innerHTML = `<span style="font-size:60px;">${countNum}</span>`;
+    // 3・2・1 の秒読み
+    let countNum = 3;
+    countdownDisplay.innerHTML = `開始まであと <span class="count-num">${countNum}</span>`;
 
-        const interval = setInterval(() => {
-            countNum--;
-            if (countNum > 0) {
-                countdownDisplay.innerHTML = `<span style="font-size:60px;">${countNum}</span>`;
-            } else {
-                clearInterval(interval);
-                startMeasurement(stream);
-            }
-        }, 1000);
-        
-    } catch (err) {
-        alert("マイクの電波をキャッチできませんでした。画面を一度リロードしてください。");
-        startBtn.disabled = false;
-    }
+    const interval = setInterval(() => {
+        countNum--;
+        if (countNum > 0) {
+            countdownDisplay.innerHTML = `開始まであと <span class="count-num">${countNum}</span>`;
+        } else {
+            clearInterval(interval);
+            countdownDisplay.innerHTML = "";
+            startMeasurement();
+        }
+    }, 1000);
 });
 
-function startMeasurement(stream) {
-    countdownDisplay.innerHTML = `<span class="action-msg">パパパパパ！<br>と言って！</span>`;
+function startMeasurement() {
+    isMeasuring = true;
+    tapZone.style.display = "flex"; // 連打ゾーンを表示
+    tapZone.innerHTML = `スタート！<br><span style="font-size:40px; color:red;">${score} 回</span>`;
     
-    let count = 0;
-    let lastSpokeTime = 0;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    
-    // 1秒間の計測（超高速10ミリ秒ごとにチェック）
-    const startTime = Date.now();
-    const checkAudio = setInterval(() => {
-        analyser.getByteFrequencyData(dataArray);
-        
-        // 平均値ではなく「その瞬間の一番大きな音（最高値）」をチェック
-        let maxVolume = 0;
-        for(let i=0; i<bufferLength; i++) {
-            if(dataArray[i] > maxVolume) { maxVolume = dataArray[i]; }
-        }
-        
-        const now = Date.now();
-        // 音が一定以上（感度3）大きくなり、かつ前回のカウントから0.08秒以上経っていたら「次のパ」とみなす
-        if (maxVolume > 3) { 
-            if (now - lastSpokeTime > 80) { 
-                count++;
-                lastSpokeTime = now;
-            }
-        }
-    }, 10);
-    
-    // 1秒（1000ミリ秒）後に終了
+    // 1秒後にタイマー終了
     setTimeout(() => {
-        clearInterval(checkAudio);
-        stream.getTracks().forEach(track => track.stop());
-        if (audioContext) audioContext.close();
-        
-        countdownDisplay.innerHTML = `<span style="font-size:30px; color:#333;">終了しました！</span>`;
+        isMeasuring = false;
+        tapZone.style.display = "none"; // 連打ゾーンを隠す
         startBtn.disabled = false;
-        showResult(count);
+        showResult(score);
     }, 1000);
 }
 
-function showResult(score) {
+// タップ（クリック）された時の処理（PCでもスマホでも確実に動く）
+function handleTap(e) {
+    if (!isMeasuring) return;
+    e.preventDefault(); // 連打時の画面ズームを防ぐおまじない
+    score++;
+    tapZone.innerHTML = `もっと叩いて！<br><span style="font-size:40px; color:red;">${score} 回</span>`;
+}
+
+// スマホのタッチと、パソコンのクリックの両方に対応
+tapZone.addEventListener('touchstart', handleTap, { passive: false });
+tapZone.addEventListener('mousedown', handleTap);
+
+function showResult(finalScore) {
     let html = "";
-    if (score >= 6) {
-        html = `<div class="result success">結果：${score} 回 / 秒<br>🎉 目標達成！素晴らしい！</div>`;
+    if (finalScore >= 6) {
+        html = `<div class="result success">結果：${finalScore} 回 / 秒<br>🎉 目標達成！素晴らしい指の動きです！</div>`;
     } else {
-        html = `<div class="result warning">結果：${score} 回 / 秒<br>⚠️ 目標は6回以上</div>`;
+        html = `<div class="result warning">結果：${finalScore} 回 / 秒<br>⚠️ 目標は6回以上（リハビリを続けましょう）</div>`;
     }
     resultOutput.innerHTML = html;
 }
