@@ -3,23 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>まいにちパタカラ（完全復活版）</title>
+    <title>まいにちパタカラ（センサー改良版）</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; background-color: #f0f8ff; padding: 20px; color: #333; }
         .container { background-color: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
         h1 { color: #0076ff; font-size: 24px; margin-bottom: 5px; }
         .subtitle { font-size: 14px; color: #666; font-weight: bold; margin-bottom: 20px; }
-        
         .guide-box { background-color: #e6f2ff; border-left: 5px solid #0076ff; padding: 12px; border-radius: 5px; text-align: left; font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
         .target-text { font-weight: bold; color: #ff5500; }
-
         button { background-color: #0076ff; color: white; border: none; padding: 15px 3px; width: 100%; border-radius: 10px; font-size: 22px; font-weight: bold; margin-top: 10px; cursor: pointer; box-shadow: 0 4px #0055b3; }
-        button:active { transform: translateY(4px); box-shadow: none; }
         button:disabled { background-color: #ccc; box-shadow: none; }
-        
         .countdown { font-size: 44px; font-weight: bold; color: #ff9900; margin: 20px 0; min-height: 120px; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #fffde6; border-radius: 10px; border: 1px solid #ffe699; }
         .action-msg { font-size: 26px; color: red; font-weight: bold; }
-
         .result { font-size: 22px; font-weight: bold; margin-top: 20px; padding: 15px; border-radius: 5px; }
         .success { background-color: #ddffdd; color: #008800; }
         .warning { background-color: #ffdddd; color: #cc0000; }
@@ -29,12 +24,12 @@
 
 <div class="container">
     <h1>まいにちパタカラ</h1>
-    <div class="subtitle">【WEBお試し版・完全復活版】</div>
+    <div class="subtitle">【WEBお試し版・センサー改良版】</div>
     
     <div class="guide-box">
         <b>💡 やり方：</b><br>
-        ① 下の青いボタンを押します。<br>
-        ② 画面に「3・2・1」と出たあと、画面が赤くなって<b>「パパパパパ！」</b>と出たら、スマホに向かって全力で発音してください！<br>
+        ① 下のボタンを押します。<br>
+        ② 「3・2 wilderness 1」のあと、画面が赤くなって<b>「パパパパパ！」</b>と出たら、スマホに向かってハッキリ発音してください！<br>
         🎯 <b>目標：1秒間に <span class="target-text">6回以上</span></b>
     </div>
     
@@ -60,7 +55,6 @@ startBtn.addEventListener('click', async () => {
     startBtn.disabled = true;
     
     try {
-        // ボタンを押した「その瞬間」に毎回あたらしく新鮮なマイクの電波を直結する（iOS対策）
         const stream = await navigator.mediaDevices.getUserMedia({ 
             audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
         });
@@ -71,7 +65,6 @@ startBtn.addEventListener('click', async () => {
         analyser.fftSize = 256;
         source.connect(analyser);
         
-        // 3・2・1の秒読み開始
         let countNum = 3;
         countdownDisplay.innerHTML = `<span style="font-size:60px;">${countNum}</span>`;
 
@@ -95,28 +88,32 @@ function startMeasurement(stream) {
     countdownDisplay.innerHTML = `<span class="action-msg">パパパパパ！<br>と言って！</span>`;
     
     let count = 0;
-    let isSpeaking = false;
+    let lastSpokeTime = 0;
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     
-    // 超高感度センサーで20ミリ秒ごとにチェック
+    // 1秒間の計測（超高速10ミリ秒ごとにチェック）
+    const startTime = Date.now();
     const checkAudio = setInterval(() => {
         analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for(let i=0; i<bufferLength; i++) { sum += dataArray[i]; }
-        let average = sum / bufferLength;
         
-        if (average > 3) { 
-            if (!isSpeaking) {
-                count++;
-                isSpeaking = true;
-            }
-        } else {
-            isSpeaking = false;
+        // 平均値ではなく「その瞬間の一番大きな音（最高値）」をチェック
+        let maxVolume = 0;
+        for(let i=0; i<bufferLength; i++) {
+            if(dataArray[i] > maxVolume) { maxVolume = dataArray[i]; }
         }
-    }, 20);
+        
+        const now = Date.now();
+        // 音が一定以上（感度3）大きくなり、かつ前回のカウントから0.08秒以上経っていたら「次のパ」とみなす
+        if (maxVolume > 3) { 
+            if (now - lastSpokeTime > 80) { 
+                count++;
+                lastSpokeTime = now;
+            }
+        }
+    }, 10);
     
-    // 1秒後にピタッと止める
+    // 1秒（1000ミリ秒）後に終了
     setTimeout(() => {
         clearInterval(checkAudio);
         stream.getTracks().forEach(track => track.stop());
@@ -133,7 +130,7 @@ function showResult(score) {
     if (score >= 6) {
         html = `<div class="result success">結果：${score} 回 / 秒<br>🎉 目標達成！素晴らしい！</div>`;
     } else {
-        html = `<div class="result warning">結果：${score} 回 / 秒<br>⚠️ 目標は6回以上（あと少し！）</div>`;
+        html = `<div class="result warning">結果：${score} 回 / 秒<br>⚠️ 目標は6回以上</div>`;
     }
     resultOutput.innerHTML = html;
 }
